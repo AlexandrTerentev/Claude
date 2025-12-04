@@ -1,0 +1,237 @@
+{
+  "motor_diagnostic_rules": {
+    "rc_not_calibrated": {
+      "keywords": ["rc not calibrated", "rc3_min", "radio"],
+      "diagnosis": "RC Controller Not Calibrated",
+      "severity": "high",
+      "cause": "Mission Planner doesn't know the range of your RC inputs. This prevents arming for safety.",
+      "solution_steps": [
+        "Go to: Initial Setup > Mandatory Hardware > Radio Calibration",
+        "Turn on your RC transmitter",
+        "Move all sticks (throttle, pitch, roll, yaw) to their extreme positions",
+        "Click 'Calibrate Radio' button in Mission Planner",
+        "Ensure all channels show GREEN bars (min ~1000, max ~2000)",
+        "Click 'Click when Done' to save calibration"
+      ],
+      "tips": [
+        "Make sure RC transmitter is bound to receiver",
+        "Check that RC receiver is powered",
+        "Verify receiver is connected to flight controller"
+      ],
+      "related_parameters": ["RC1_MIN", "RC1_MAX", "RC3_MIN", "RC3_MAX"]
+    },
+
+    "compass_not_calibrated": {
+      "keywords": ["compass", "mag", "calibrat"],
+      "diagnosis": "Compass Calibration Required",
+      "severity": "high",
+      "cause": "Compass needs calibration to determine magnetic north accurately for navigation.",
+      "solution_steps": [
+        "Go to: Initial Setup > Mandatory Hardware > Compass",
+        "Click 'Onboard Mag Calibration' button",
+        "Take drone outside to open area (away from metal objects, cars, buildings)",
+        "Hold drone and rotate slowly in all directions",
+        "Rotate on pitch axis, roll axis, and yaw axis",
+        "Continue until you see 'Calibration successful' message",
+        "If calibration fails, move to different location and retry"
+      ],
+      "tips": [
+        "Stay away from metal objects during calibration",
+        "Don't calibrate near cars, reinforced concrete, or power lines",
+        "Calibrate in the field where you'll fly",
+        "Rotate smoothly and slowly"
+      ],
+      "related_parameters": ["COMPASS_ENABLE", "COMPASS_AUTODEC"]
+    },
+
+    "accelerometer_not_calibrated": {
+      "keywords": ["accel", "accelerometer", "calibrat"],
+      "diagnosis": "Accelerometer Calibration Required",
+      "severity": "high",
+      "cause": "Accelerometer determines level flight orientation and needs calibration.",
+      "solution_steps": [
+        "Go to: Initial Setup > Mandatory Hardware > Accel Calibration",
+        "Click 'Calibrate Accel' button",
+        "Follow on-screen instructions for each position:",
+        "  - Level (normal position)",
+        "  - On left side",
+        "  - On right side",
+        "  - Nose down",
+        "  - Nose up",
+        "  - On back",
+        "Keep drone perfectly still during each measurement",
+        "Wait for beep/confirmation before moving to next position"
+      ],
+      "tips": [
+        "Use a level surface",
+        "Don't touch drone during measurements",
+        "Keep propellers installed for correct weight distribution"
+      ],
+      "related_parameters": ["INS_ACCOFFS_X", "INS_ACCOFFS_Y", "INS_ACCOFFS_Z"]
+    },
+
+    "battery_failsafe": {
+      "keywords": ["battery", "voltage", "failsafe"],
+      "diagnosis": "Battery Issue Detected",
+      "severity": "high",
+      "cause": "Battery voltage is too low or battery monitoring not configured correctly.",
+      "solution_steps": [
+        "Check battery is properly connected",
+        "Verify battery is fully charged (check voltage with multimeter)",
+        "Go to: Initial Setup > Optional Hardware > Battery Monitor",
+        "Select correct battery monitor type",
+        "Set appropriate voltage/current sensor parameters",
+        "Configure failsafe voltage thresholds"
+      ],
+      "tips": [
+        "Fully charge battery before testing",
+        "Check battery connector for damage",
+        "Verify correct number of cells configured"
+      ],
+      "related_parameters": ["BATT_MONITOR", "BATT_CAPACITY", "BATT_VOLT_PIN"]
+    },
+
+    "esc_not_calibrated": {
+      "keywords": ["esc", "throttle", "motors: check frame"],
+      "diagnosis": "ESC Calibration May Be Required",
+      "severity": "medium",
+      "cause": "Electronic Speed Controllers need to learn the throttle range.",
+      "solution_steps": [
+        "WARNING: Propellers will spin! Remove propellers first!",
+        "Go to: Initial Setup > Optional Hardware > ESC Calibration",
+        "Follow the calibration wizard carefully",
+        "Typical process:",
+        "  1. Disconnect battery",
+        "  2. Move throttle to maximum",
+        "  3. Connect battery (ESCs will beep)",
+        "  4. Move throttle to minimum",
+        "  5. ESCs will beep confirmation",
+        "Reconnect propellers after calibration"
+      ],
+      "tips": [
+        "ALWAYS remove propellers before ESC calibration",
+        "Make sure all ESCs are the same type",
+        "Calibrate all ESCs together"
+      ],
+      "related_parameters": ["MOT_PWM_MIN", "MOT_PWM_MAX", "MOT_SPIN_ARM"]
+    },
+
+    "gps_issues": {
+      "keywords": ["gps", "satellite", "hdop"],
+      "diagnosis": "GPS Signal Issues",
+      "severity": "medium",
+      "cause": "GPS doesn't have enough satellites or poor signal quality.",
+      "solution_steps": [
+        "Take drone outside to open area",
+        "Wait 2-5 minutes for GPS to acquire satellites",
+        "Check GPS status in HUD (need 3D Fix)",
+        "Verify HDOP < 2.0 for good accuracy",
+        "If no fix after 5 minutes:",
+        "  - Check GPS cable connection",
+        "  - Verify GPS module is powered",
+        "  - Check GPS antenna has clear view of sky"
+      ],
+      "tips": [
+        "GPS needs clear view of sky",
+        "Don't test indoors",
+        "First GPS lock can take 5+ minutes"
+      ],
+      "related_parameters": ["GPS_TYPE"]
+    },
+
+    "mode_not_armable": {
+      "keywords": ["mode", "arm", "switch"],
+      "diagnosis": "Flight Mode Issue",
+      "severity": "medium",
+      "cause": "Trying to arm in a mode that requires GPS or other sensors.",
+      "solution_steps": [
+        "Switch to STABILIZE mode (doesn't require GPS)",
+        "Check Mode switch on RC transmitter",
+        "Verify flight modes configured: Initial Setup > Mandatory Hardware > Flight Modes",
+        "For first test, use STABILIZE mode"
+      ],
+      "tips": [
+        "STABILIZE mode is safest for testing",
+        "LOITER/AUTO/GUIDED require GPS lock",
+        "ACRO mode is for experienced pilots only"
+      ],
+      "related_parameters": ["FLTMODE1", "FLTMODE2", "FLTMODE3"]
+    },
+
+    "safety_switch": {
+      "keywords": ["safety", "switch"],
+      "diagnosis": "Safety Switch Not Activated",
+      "severity": "low",
+      "cause": "Hardware safety switch on GPS/flight controller must be pressed.",
+      "solution_steps": [
+        "Locate safety switch (usually on GPS module or flight controller)",
+        "Press and hold until LED changes from blinking to solid",
+        "Alternatively, disable safety switch:",
+        "  - Go to: Config > Full Parameter List",
+        "  - Find BRD_SAFETY_DEFLT",
+        "  - Set to 0 to disable",
+        "  - Write Parameters"
+      ],
+      "tips": [
+        "Safety switch is a physical button",
+        "LED indicates status: blinking = not safe, solid = safe",
+        "Only disable if hardware switch is unavailable"
+      ],
+      "related_parameters": ["BRD_SAFETY_DEFLT", "BRD_SAFETYENABLE"]
+    },
+
+    "generic_prearm": {
+      "keywords": ["prearm"],
+      "diagnosis": "PreArm Check Failed",
+      "severity": "medium",
+      "cause": "Mission Planner detected an issue preventing safe arming.",
+      "solution_steps": [
+        "Read the specific PreArm message carefully",
+        "Check HUD for red/yellow warnings",
+        "Common issues:",
+        "  - Calibration not complete",
+        "  - Sensor failure",
+        "  - RC not connected",
+        "  - GPS no lock (if required)",
+        "Search online: 'ArduPilot PreArm [your specific message]'",
+        "Check ArduPilot forums for similar issues"
+      ],
+      "tips": [
+        "PreArm checks prevent dangerous situations",
+        "Don't disable PreArm checks unless you know what you're doing",
+        "Each PreArm message is specific - read it carefully"
+      ],
+      "related_parameters": ["ARMING_CHECK"]
+    }
+  },
+
+  "quick_fixes": {
+    "motors_not_spinning": [
+      "Check battery is connected and charged",
+      "Verify RC transmitter is on and bound",
+      "Ensure safety switch is pressed (LED solid)",
+      "Check flight controller has power (LEDs on)",
+      "Verify ESCs are connected correctly",
+      "Try arming in STABILIZE mode",
+      "Check PreArm errors in Mission Planner messages"
+    ],
+
+    "cant_arm": [
+      "Read PreArm error messages in HUD",
+      "Verify all calibrations complete (compass, accel, radio)",
+      "Check GPS has 3D fix if using GPS mode",
+      "Ensure throttle stick is at minimum",
+      "Press safety switch if equipped",
+      "Try switching to STABILIZE mode"
+    ],
+
+    "wrong_motor_direction": [
+      "This is normal before configuration",
+      "Go to: Initial Setup > Optional Hardware > Motor Test",
+      "Test each motor individually",
+      "For motors spinning backwards:",
+      "  - Swap any 2 of the 3 motor wires on the ESC",
+      "Verify motor direction matches frame diagram"
+    ]
+  }
+}
