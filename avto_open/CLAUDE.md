@@ -2,46 +2,50 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Project Overview
+## ВАЖНО: ЯЗЫК ОБЩЕНИЯ
 
-AvtoOpen is a cross-platform (Windows/Linux) assembly launcher with automation support. Users create "assemblies" - collections of applications that launch together with automated actions (clicks, keystrokes, text input).
+**ОБЯЗАТЕЛЬНОЕ ТРЕБОВАНИЕ:** При работе с этим проектом Claude ДОЛЖЕН отвечать ТОЛЬКО на русском языке. Все объяснения, комментарии, сообщения об ошибках и техническая документация должны быть написаны на русском языке.
 
-## Commands
+## Обзор проекта
+
+AvtoOpen - это кроссплатформенный (Windows/Linux) лаунчер сборок с поддержкой автоматизации. Пользователи создают "сборки" - коллекции приложений, которые запускаются вместе с автоматическими действиями (клики, нажатия клавиш, ввод текста).
+
+## Команды
 
 ```bash
-# Install dependencies
+# Установка зависимостей
 pip install -r requirements.txt
 
-# Run the application
+# Запуск приложения
 python src/main.py
-# or
+# или
 cd src && python main.py
 ```
 
-## Architecture
+## Архитектура
 
-### Core Layer (`src/core/`)
-- **action.py** - `Action` class with factory methods (`delay()`, `click()`, `type_text()`, `hotkey()`). Uses `ActionType` enum.
-- **assembly.py** - `Assembly` (collection of apps) and `AppConfig` (single app with its actions) dataclasses.
-- **automation.py** - `AutomationEngine` wraps PyAutoGUI for executing actions.
-- **executor.py** - `AssemblyExecutor` launches apps and runs their actions, supports parallel execution.
+### Основной слой (`src/core/`)
+- **action.py** - Класс `Action` с фабричными методами (`delay()`, `click()`, `type_text()`, `hotkey()`). Использует enum `ActionType`.
+- **assembly.py** - Dataclass'ы `Assembly` (коллекция приложений) и `AppConfig` (одно приложение с его действиями).
+- **automation.py** - `AutomationEngine` оборачивает PyAutoGUI для выполнения действий.
+- **executor.py** - `AssemblyExecutor` запускает приложения и выполняет их действия, поддерживает параллельное выполнение.
 
-### Storage Layer (`src/storage/`)
-- **config.py** - `ConfigManager` handles JSON serialization to `~/.config/avto_open/` (Linux) or `%APPDATA%/avto_open/` (Windows).
+### Слой хранения (`src/storage/`)
+- **config.py** - `ConfigManager` управляет сериализацией в JSON в `~/.config/avto_open/` (Linux) или `%APPDATA%/avto_open/` (Windows).
 
-### UI Layer (`src/ui/`)
-- **main_window.py** - Main window with assembly list, run button, execution log. Uses `ExecutorThread` for background execution.
-- **assembly_editor.py** - Dialog for editing assembly name, description, and app list.
-- **action_editor.py** - Dialog for adding/editing actions with mouse position capture helper.
+### Слой интерфейса (`src/ui/`)
+- **main_window.py** - Главное окно со списком сборок, кнопкой запуска, логом выполнения. Использует `ExecutorThread` для фонового выполнения.
+- **assembly_editor.py** - Диалог для редактирования названия сборки, описания и списка приложений.
+- **action_editor.py** - Диалог для добавления/редактирования действий с помощником захвата позиции мыши.
 
-### Data Flow
-1. User creates Assembly → adds AppConfigs → adds Actions to each AppConfig
-2. ConfigManager saves to JSON
-3. AssemblyExecutor launches apps in parallel → AutomationEngine executes actions sequentially per app
+### Поток данных
+1. Пользователь создает Assembly → добавляет AppConfig'и → добавляет Action'ы в каждый AppConfig
+2. ConfigManager сохраняет в JSON
+3. AssemblyExecutor запускает приложения параллельно → AutomationEngine выполняет действия последовательно для каждого приложения
 
-## Key Patterns
+## Ключевые паттерны
 
-- Dataclasses with `to_dict()`/`from_dict()` for JSON serialization
-- Factory methods for Action creation (e.g., `Action.click(x, y)`)
-- QThread for non-blocking execution in GUI
-- Platform detection via `platform.system()` for Windows/Linux paths
+- Dataclass'ы с методами `to_dict()`/`from_dict()` для JSON сериализации
+- Фабричные методы для создания Action (например, `Action.click(x, y)`)
+- QThread для неблокирующего выполнения в GUI
+- Определение платформы через `platform.system()` для путей Windows/Linux

@@ -2,6 +2,7 @@ using System;
 using System.Drawing;
 using System.Windows.Forms;
 using System.IO;
+using System.Text;
 using MissionPlanner;
 using MissionPlanner.Plugin;
 using MissionPlanner.GCSViews;
@@ -27,6 +28,9 @@ namespace MPDiagnosticAgent
         {
             try
             {
+                // Установка UTF-8 кодировки для поддержки русского языка
+                Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+
                 // Initialize Python
                 pyEngine = Python.CreateEngine();
                 pyScope = pyEngine.CreateScope();
@@ -41,6 +45,8 @@ namespace MPDiagnosticAgent
                     string agentFile = Path.Combine(enginePath, "agent_core.py");
                     if (File.Exists(agentFile))
                     {
+                        // Установка кодировки Python для корректной работы с UTF-8
+                        pyEngine.Execute("import sys; sys.setdefaultencoding('utf-8') if hasattr(sys, 'setdefaultencoding') else None", pyScope);
                         pyEngine.ExecuteFile(agentFile, pyScope);
                         pythonReady = true;
                     }
@@ -49,9 +55,11 @@ namespace MPDiagnosticAgent
                 loopratehz = 0.1f;
                 return true;
             }
-            catch
+            catch (Exception ex)
             {
                 pythonReady = false;
+                // Логируем ошибку для диагностики
+                System.Diagnostics.Debug.WriteLine($"Python init error: {ex.Message}");
                 return true; // Continue anyway
             }
         }
@@ -86,7 +94,8 @@ namespace MPDiagnosticAgent
                 {
                     Dock = DockStyle.Fill,
                     Font = new Font("Segoe UI", 10),
-                    Multiline = true
+                    Multiline = true,
+                    ImeMode = ImeMode.On  // Поддержка ввода на разных языках, включая русский
                 };
                 inputBox.KeyDown += (s, e) =>
                 {
