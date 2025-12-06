@@ -14,8 +14,7 @@ from .log_analyzer import LogAnalyzer
 from .mavlink_interface import MAVLinkInterface
 from .log_downloader import LogDownloader
 
-# Upcoming modules (to be implemented)
-# from .diagnostic_engine import DiagnosticEngine
+from .diagnostic_engine import DiagnosticEngine
 
 __all__ = [
     'Config',
@@ -23,4 +22,5 @@ __all__ = [
     'LogAnalyzer',
     'MAVLinkInterface',
     'LogDownloader',
+    'DiagnosticEngine',
 ]
