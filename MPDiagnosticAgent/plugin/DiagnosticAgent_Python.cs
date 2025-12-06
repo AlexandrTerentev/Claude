@@ -76,6 +76,15 @@ namespace MPDiagnosticAgent
                     Padding = new Padding(5)
                 };
 
+                // Восстанавливать фокус при показе панели
+                mainPanel.VisibleChanged += (s, e) =>
+                {
+                    if (mainPanel.Visible && inputBox != null)
+                    {
+                        inputBox.BeginInvoke(new Action(() => inputBox.Focus()));
+                    }
+                };
+
                 chatBox = new RichTextBox
                 {
                     Dock = DockStyle.Fill,
@@ -83,6 +92,10 @@ namespace MPDiagnosticAgent
                     BackColor = Color.White,
                     Font = new Font("Consolas", 9)
                 };
+
+                // При клике на chatBox или mainPanel переводить фокус на inputBox
+                chatBox.Click += (s, e) => { if (!inputBox.IsDisposed) inputBox.Focus(); };
+                mainPanel.Click += (s, e) => { if (inputBox != null && !inputBox.IsDisposed) inputBox.Focus(); };
 
                 var inputPanel = new Panel
                 {
@@ -95,17 +108,12 @@ namespace MPDiagnosticAgent
                     Dock = DockStyle.Fill,
                     Font = new Font("Segoe UI", 10),
                     Multiline = true,
-                    ImeMode = ImeMode.On  // Поддержка ввода на разных языках, включая русский
+                    ImeMode = ImeMode.On,  // Поддержка ввода на разных языках, включая русский
+                    TabStop = true,
+                    TabIndex = 0
                 };
-                inputBox.KeyDown += (s, e) =>
-                {
-                    if (e.KeyCode == Keys.Enter && !e.Shift)
-                    {
-                        SendMessage();
-                        e.Handled = true;
-                        e.SuppressKeyPress = true;
-                    }
-                };
+                // Убрал блокировку Enter - теперь можно печатать на любых языках
+                // Для отправки используйте кнопку Send
 
                 var sendBtn = new Button
                 {
@@ -122,16 +130,37 @@ namespace MPDiagnosticAgent
                 mainPanel.Controls.Add(chatBox);
                 mainPanel.Controls.Add(inputPanel);
 
+                // Добавляем панель на вкладку DATA
                 FlightData.instance.BeginInvoke((MethodInvoker)delegate
                 {
                     FlightData.instance.Controls.Add(mainPanel);
                     FlightData.instance.Controls.SetChildIndex(mainPanel, 0);
-                    inputBox.Focus();
+
+                    // Обработчик для восстановления фокуса при показе вкладки
+                    FlightData.instance.VisibleChanged += (s, e) =>
+                    {
+                        if (FlightData.instance.Visible && inputBox != null && !inputBox.IsDisposed)
+                        {
+                            inputBox.BeginInvoke(new Action(() =>
+                            {
+                                if (!inputBox.IsDisposed)
+                                    inputBox.Focus();
+                            }));
+                        }
+                    };
+
+                    // Устанавливаем фокус после добавления
+                    inputBox.BeginInvoke(new Action(() =>
+                    {
+                        System.Threading.Thread.Sleep(100);
+                        if (!inputBox.IsDisposed)
+                            inputBox.Focus();
+                    }));
                 });
 
                 string startMsg = pythonReady
-                    ? "Python AI Agent Ready!\n\nAsk me anything about your drone.\n\nPress Enter to send, Shift+Enter for new line."
-                    : "Basic Agent Ready (Python unavailable)\n\nType 'help' for commands.\n\nPress Enter to send, Shift+Enter for new line.";
+                    ? "Python AI Agent готов!\n\nЗадайте любой вопрос о дроне.\n\nНапишите сообщение и нажмите кнопку Send."
+                    : "Basic Agent готов (Python недоступен)\n\nНапишите 'help' для списка команд.\n\nНажмите кнопку Send для отправки.";
                 AddMsg("Agent", startMsg, Color.Green);
 
                 return true;
@@ -215,7 +244,23 @@ namespace MPDiagnosticAgent
             chatBox.ScrollToCaret();
         }
 
-        public override bool Loop() => true;
+        public override bool Loop()
+        {
+            // Если панель видима и на переднем плане, но фокус потерян - восстановить
+            if (mainPanel != null && mainPanel.Visible && mainPanel.Parent != null)
+            {
+                if (mainPanel.Parent.Visible && !inputBox.Focused && !chatBox.Focused)
+                {
+                    // Проверяем, активна ли вкладка FlightData
+                    if (MainV2.instance.FlightData != null && MainV2.instance.FlightData.Visible)
+                    {
+                        // Не переводим фокус агрессивно, только если пользователь кликнул в область панели
+                        // это предотвратит постоянный захват фокуса
+                    }
+                }
+            }
+            return true;
+        }
 
         public override bool Exit()
         {

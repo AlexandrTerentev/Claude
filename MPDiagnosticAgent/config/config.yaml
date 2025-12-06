@@ -1,0 +1,63 @@
+# MPDiagnosticAgent Configuration File
+# This file allows you to customize the diagnostic agent behavior
+
+# Mission Planner Settings
+mission_planner:
+  # Automatically detect Mission Planner installation
+  auto_detect: true
+
+  # Manual path override (uncomment and set if auto-detect fails)
+  # manual_path: /home/user_1/missionplanner
+  # manual_path: C:/Program Files/Mission Planner  # Windows example
+  manual_path: null
+
+# Log File Locations
+log_locations:
+  # Mission Planner main log file
+  # Use 'auto' for automatic detection based on Mission Planner path
+  mission_planner_log: auto
+
+  # Telemetry log directory (.tlog files)
+  tlog_directory: auto
+
+  # Dataflash log directory (.bin files from drone)
+  bin_directory: auto
+
+# MAVLink Connection Settings
+mavlink:
+  # Default serial port for drone connection
+  # Linux examples: /dev/ttyUSB0, /dev/ttyACM0
+  # Windows examples: COM3, COM4
+  default_port: /dev/ttyUSB0
+
+  # Baudrate for MAVLink communication
+  # Standard ArduPilot baudrate is 921600
+  # Other common values: 115200, 57600
+  baudrate: 921600
+
+  # Timeout for operations (seconds)
+  # Log download can take several minutes for large files
+  timeout: 300
+
+  # Number of retry attempts on connection failure
+  retry_count: 3
+
+# Diagnostic Settings
+diagnostics:
+  # Number of recent log lines to analyze for errors
+  log_lines_to_analyze: 300
+
+  # Enable ArduPilot Wiki integration for enhanced solutions
+  wiki_integration: true
+
+  # Language for diagnostics
+  # Options: 'auto' (detect), 'ru' (Russian), 'en' (English)
+  language: auto
+
+# Testing and Development
+testing:
+  # Set to true if you have a drone available for testing
+  drone_available: true
+
+  # Automatically test connection on startup (useful for development)
+  test_connection_on_startup: false
