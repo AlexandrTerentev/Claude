@@ -35,19 +35,19 @@ namespace MPDiagnosticAgent
                 pyEngine = Python.CreateEngine();
                 pyScope = pyEngine.CreateScope();
 
-                string enginePath = "/home/user_1/Desktop/No_problem/Claude/MPDiagnosticAgent/engine";
-                if (Directory.Exists(enginePath))
+                string projectPath = "/home/user_1/Desktop/No_problem/Claude/MPDiagnosticAgent";
+                if (Directory.Exists(projectPath))
                 {
                     var searchPaths = pyEngine.GetSearchPaths();
-                    searchPaths.Add(enginePath);
+                    searchPaths.Add(projectPath);
                     pyEngine.SetSearchPaths(searchPaths);
 
-                    string agentFile = Path.Combine(enginePath, "agent_core.py");
-                    if (File.Exists(agentFile))
+                    string engineFile = Path.Combine(projectPath, "core", "diagnostic_engine.py");
+                    if (File.Exists(engineFile))
                     {
                         // Установка кодировки Python для корректной работы с UTF-8
                         pyEngine.Execute("import sys; sys.setdefaultencoding('utf-8') if hasattr(sys, 'setdefaultencoding') else None", pyScope);
-                        pyEngine.ExecuteFile(agentFile, pyScope);
+                        pyEngine.ExecuteFile(engineFile, pyScope);
                         pythonReady = true;
                     }
                 }
@@ -108,11 +108,12 @@ namespace MPDiagnosticAgent
                     Dock = DockStyle.Fill,
                     Font = new Font("Segoe UI", 10),
                     Multiline = true,
-                    ImeMode = ImeMode.On,  // Поддержка ввода на разных языках, включая русский
+                    BackColor = Color.White,  // Белый фон
+                    ForeColor = Color.Black,  // Черный текст
                     TabStop = true,
                     TabIndex = 0
                 };
-                // Убрал блокировку Enter - теперь можно печатать на любых языках
+                // Без обработки Enter - теперь работает русский язык
                 // Для отправки используйте кнопку Send
 
                 var sendBtn = new Button

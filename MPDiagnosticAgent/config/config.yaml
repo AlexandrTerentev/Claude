@@ -28,7 +28,7 @@ mavlink:
   # Default serial port for drone connection
   # Linux examples: /dev/ttyUSB0, /dev/ttyACM0
   # Windows examples: COM3, COM4
-  default_port: /dev/ttyUSB0
+  default_port: /dev/ttyACM0
 
   # Baudrate for MAVLink communication
   # Standard ArduPilot baudrate is 921600
