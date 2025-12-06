@@ -7,8 +7,20 @@ Unified diagnostic engine for Mission Planner and ArduPilot drones
 __version__ = '5.0.0'
 __author__ = 'Claude + User'
 
-# Core modules will be imported here as they're created
-# from .config import Config
-# from .log_analyzer import LogAnalyzer
+# Core modules
+from .config import Config
+from .knowledge_base import KnowledgeBase
+from .log_analyzer import LogAnalyzer
+from .mavlink_interface import MAVLinkInterface
+from .log_downloader import LogDownloader
+
+# Upcoming modules (to be implemented)
 # from .diagnostic_engine import DiagnosticEngine
-# from .log_downloader import LogDownloader
+
+__all__ = [
+    'Config',
+    'KnowledgeBase',
+    'LogAnalyzer',
+    'MAVLinkInterface',
+    'LogDownloader',
+]
