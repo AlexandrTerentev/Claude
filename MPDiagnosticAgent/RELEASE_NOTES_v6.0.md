@@ -44,14 +44,14 @@
 - ✅ Запись параметров через MAVLink PARAM_SET
 - ✅ Ссылки на ArduPilot Wiki для каждого типа ошибок
 
-### 3. Global Command (`mpdiag`)
+### 3. Global Command (`agent_ran`)
 **Установка глобальной команды:**
 
 ```bash
 sudo ./install.sh
-mpdiag              # Запуск из любой директории
-mpdiag --cli        # CLI режим
-mpdiag --version    # Версия
+agent_ran              # Запуск из любой директории
+agent_ran --cli        # CLI режим
+agent_ran --version    # Версия
 ```
 
 ---
@@ -133,7 +133,7 @@ git clone https://github.com/AlexandrTerentev/Claude.git
 cd Claude/MPDiagnosticAgent
 pip3 install -r requirements.txt
 sudo ./install.sh    # Опционально
-mpdiag               # Запуск!
+agent_ran               # Запуск!
 ```
 
 Или прямой запуск:

@@ -656,10 +656,11 @@ if __name__ == '__main__':
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  mpdiag                    Launch GUI interface
-  mpdiag --version          Show version info
+  agent_ran                 Launch GUI interface
+  agent_ran --cli           Launch CLI mode
+  agent_ran --version       Show version info
 
-For more information, visit: https://github.com/yourusername/MPDiagnosticAgent
+For more information, visit: https://github.com/AlexandrTerentev/Claude/tree/main/MPDiagnosticAgent
         """
     )
 

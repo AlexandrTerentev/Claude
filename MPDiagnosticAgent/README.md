@@ -46,7 +46,7 @@ pip3 install -r requirements.txt
 sudo ./install.sh
 
 # Launch unified interface
-mpdiag
+agent_ran
 # OR
 python3 main.py
 ```
@@ -55,13 +55,13 @@ python3 main.py
 
 **Unified GUI (v6.0 - Recommended):**
 ```bash
-mpdiag                 # If installed globally
+agent_ran                 # If installed globally
 python3 main.py        # Direct launch
 ```
 
 **CLI Mode:**
 ```bash
-mpdiag --cli           # Launch CLI interface
+agent_ran --cli           # Launch CLI interface
 python3 main.py --cli  # OR direct CLI
 ```
 
@@ -95,7 +95,7 @@ Launch the unified interface and ask questions in natural language:
 - "Как исправить?" → Get auto-fix suggestions
 
 ### 2. One-Click Auto-Fix (NEW in v6.0)
-1. Launch `mpdiag`
+1. Launch `agent_ran`
 2. Go to **🔧 Auto-Fix** tab
 3. See all detected issues as cards
 4. Click **Apply Fix** to write parameters to drone
@@ -103,7 +103,7 @@ Launch the unified interface and ask questions in natural language:
 
 ### 3. Download Flight Logs
 ```bash
-mpdiag --cli
+agent_ran --cli
 # Then: download --latest
 ```
 Download latest `.bin` log from drone after flight.

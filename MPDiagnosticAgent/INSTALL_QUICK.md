@@ -14,7 +14,7 @@ pip3 install -r requirements.txt
 sudo ./install.sh
 
 # 4. Запустить!
-mpdiag
+agent_ran
 # ИЛИ
 python3 main.py
 ```
@@ -64,9 +64,9 @@ python3 main.py
 После установки через `sudo ./install.sh` можно запускать из любой директории:
 
 ```bash
-mpdiag              # GUI интерфейс
-mpdiag --cli        # CLI режим
-mpdiag --version    # Версия
+agent_ran              # GUI интерфейс
+agent_ran --cli        # CLI режим
+agent_ran --version    # Версия
 ```
 
 ## Требования
