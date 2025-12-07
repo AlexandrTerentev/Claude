@@ -1,40 +1,32 @@
-# MPDiagnosticAgent v5.0
+# MPDiagnosticAgent v6.0 🚁
 
-**Unified diagnostic tool for ArduPilot drones with MAVLink log download**
+**AI-Powered Unified Diagnostic Assistant for ArduPilot Drones**
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://python.org)
 [![ArduPilot](https://img.shields.io/badge/ArduPilot-compatible-green.svg)](https://ardupilot.org)
 
-🚁 Smart diagnostic assistant for Mission Planner and ArduPilot drones
-📥 Download logs from drone via MAVLink
-🔍 Analyze logs, diagnose issues, get solutions
-🌐 Russian + English support
+**NEW in v6.0**: Complete unified AI assistant with natural language Q&A and one-click auto-fixes!
 
 ---
 
-## ✨ Features
+## 🌟 What's New in v6.0
 
-### Core Functionality
-- ✅ **Smart Diagnostics** - AI-powered analysis of drone issues
-- ✅ **Log Download** - Download `.bin` dataflash logs from drone via MAVLink
-- ✅ **Log Analysis** - Parse Mission Planner, telemetry, and dataflash logs
-- ✅ **PreArm Diagnostics** - Identify and solve arming issues
-- ✅ **Motor Troubleshooting** - Step-by-step motor diagnostic guidance
-- ✅ **Wiki Integration** - Search ArduPilot Wiki directly from the tool
-- ✅ **Knowledge Base** - 9+ diagnostic rules with solutions
-- ✅ **Multi-Language** - Full Russian and English support
+### Unified Intelligent Agent
+- 💬 **AI Chat Assistant** - Ask questions about logs in natural language (Russian/English)
+- 🔧 **One-Click Auto-Fix** - Automatic parameter changes with single button click
+- 📥 **Integrated Log Download** - Download logs from drone via MAVLink
+- 🎯 **Smart Analysis** - Deep error analysis with explanations and solutions
+- ⚡ **All-in-One Interface** - Everything in single application with tabs
 
-### Three User Interfaces
-1. **🖥️ Standalone GUI** - Graphical interface with log download tab
-2. **⌨️ CLI Tool** - Command-line interface for scripts/automation
-3. **🔌 Mission Planner Plugin** - C# plugin (in development)
-
-### Tested & Working
-- ✅ Tested with real ArduPilot Quadcopter
-- ✅ Successfully downloaded logs via USB (`/dev/ttyACM0`)
-- ✅ Cross-platform (Linux/Windows)
-- ✅ No hardcoded paths - fully configurable
+### Key Features
+- ✅ **Natural Language Interface** - "Почему дрон не взлетает?" → Get detailed analysis
+- ✅ **Auto-Fix System** - Detects issues and offers parameter fixes
+- ✅ **MAVLink Parameter Writing** - Apply fixes directly to drone
+- ✅ **Log Download** - Download `.bin` dataflash logs from drone via USB
+- ✅ **Smart Diagnostics** - PreArm errors, battery, RC, GPS, compass analysis
+- ✅ **Wiki Integration** - Links to ArduPilot documentation
+- ✅ **Cross-Platform** - Linux, Windows, macOS support
 
 ---
 
@@ -50,22 +42,34 @@ cd MPDiagnosticAgent
 # Install dependencies
 pip3 install -r requirements.txt
 
-# Test installation
-python3 -m interfaces.cli config
+# Install global command (optional)
+sudo ./install.sh
+
+# Launch unified interface
+mpdiag
+# OR
+python3 main.py
 ```
 
 ### Usage
 
-**GUI:**
+**Unified GUI (v6.0 - Recommended):**
 ```bash
-python3 -m interfaces.gui_standalone
+mpdiag                 # If installed globally
+python3 main.py        # Direct launch
 ```
 
-**CLI:**
+**CLI Mode:**
+```bash
+mpdiag --cli           # Launch CLI interface
+python3 main.py --cli  # OR direct CLI
+```
+
+**Legacy interfaces (still available):**
 ```bash
 python3 -m interfaces.cli status
-python3 -m interfaces.cli download --latest --port /dev/ttyACM0
 python3 -m interfaces.cli motors
+python3 -m interfaces.gui_standalone
 ```
 
 ---
@@ -80,19 +84,31 @@ python3 -m interfaces.cli motors
 
 ## 🎯 Use Cases
 
-### 1. Pre-Flight Check
-```bash
-python3 -m interfaces.cli status
-```
-Get comprehensive drone health report before flying.
+### 1. AI Chat Assistant (NEW in v6.0)
+Launch the unified interface and ask questions in natural language:
 
-### 2. Download Flight Logs
+**Examples:**
+- "Почему дрон не взлетает?" → Get PreArm error analysis
+- "Что означает 'RC not found'?" → Detailed error explanation
+- "Показать логи" → Display log entries
+- "Анализ" → Show complete analysis results
+- "Как исправить?" → Get auto-fix suggestions
+
+### 2. One-Click Auto-Fix (NEW in v6.0)
+1. Launch `mpdiag`
+2. Go to **🔧 Auto-Fix** tab
+3. See all detected issues as cards
+4. Click **Apply Fix** to write parameters to drone
+5. Done! Parameters updated automatically
+
+### 3. Download Flight Logs
 ```bash
-python3 -m interfaces.cli download --latest
+mpdiag --cli
+# Then: download --latest
 ```
 Download latest `.bin` log from drone after flight.
 
-### 3. Diagnose Motor Issues
+### 4. Diagnose Motor Issues
 ```bash
 python3 -m interfaces.cli motors
 ```
