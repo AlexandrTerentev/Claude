@@ -239,6 +239,11 @@ class Config:
 
         return None
 
+    @property
+    def mission_planner_path(self) -> Optional[Path]:
+        """Get Mission Planner path (property for GUI compatibility)"""
+        return self._get_mp_path()
+
     def _ensure_directories(self):
         """Create necessary directories if they don't exist"""
         dirs_to_create = [self.tlog_dir, self.bin_dir]

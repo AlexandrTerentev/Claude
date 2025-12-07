@@ -95,17 +95,30 @@ class MPDCLI:
 
     def cmd_download(self, args):
         """Download logs from drone"""
-        # Connect to drone
+        # Auto-detect port if not specified
         port = args.port or self.config.mavlink_port
+
+        # Try to find available ports if configured port doesn't exist
+        from core.mavlink_interface import MAVLinkInterface
+        available_ports = MAVLinkInterface.find_available_ports()
+
+        if available_ports:
+            print(f"Found available ports: {', '.join(available_ports)}")
+            if port not in available_ports and available_ports:
+                print(f"⚠ Configured port {port} not found, trying {available_ports[0]}")
+                port = available_ports[0]
+
         print(f"Connecting to drone on {port}...")
 
         try:
             self.downloader = LogDownloader(config=self.config)
+            # Override port with detected one
+            self.downloader.mav.connection_string = port
 
             if not self.downloader.connect():
                 print("✗ Failed to connect to drone")
                 print("  Check:")
-                print(f"    1. Drone is connected to {port}")
+                print(f"    1. Drone is connected (available ports: {available_ports or 'none'})")
                 print("    2. Correct port in config.yaml")
                 print("    3. User has serial port permissions")
                 return 1

@@ -241,10 +241,22 @@ class MPDiagnosticGUI:
         tk.Label(port_row, text="Port:" if self.language == 'en' else "Порт:",
                 bg=self.bg_color, fg=self.fg_color, font=('Liberation Mono', 10)).pack(side=tk.LEFT)
 
-        self.port_var = tk.StringVar(value=self.config.mavlink_port)
-        port_entry = tk.Entry(port_row, textvariable=self.port_var, bg=self.input_bg,
-                             fg=self.fg_color, font=('Liberation Mono', 10), width=20)
-        port_entry.pack(side=tk.LEFT, padx=10)
+        # Auto-detect available ports
+        from core.mavlink_interface import MAVLinkInterface
+        available_ports = MAVLinkInterface.find_available_ports()
+
+        # Use dropdown if ports available, otherwise text entry
+        if available_ports:
+            self.port_var = tk.StringVar(value=available_ports[0])
+            port_combo = ttk.Combobox(port_row, textvariable=self.port_var,
+                                     values=available_ports, width=18,
+                                     font=('Liberation Mono', 10))
+            port_combo.pack(side=tk.LEFT, padx=10)
+        else:
+            self.port_var = tk.StringVar(value=self.config.mavlink_port)
+            port_entry = tk.Entry(port_row, textvariable=self.port_var, bg=self.input_bg,
+                                 fg=self.fg_color, font=('Liberation Mono', 10), width=20)
+            port_entry.pack(side=tk.LEFT, padx=10)
 
         # Connect button
         self.connect_btn = tk.Button(

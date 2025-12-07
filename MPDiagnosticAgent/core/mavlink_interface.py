@@ -5,7 +5,8 @@ Handles connection and communication with ArduPilot drones via MAVLink protocol
 """
 
 import time
-from typing import Optional, Callable, Any
+import glob
+from typing import Optional, Callable, Any, List
 from pymavlink import mavutil
 
 # Handle imports for both module and standalone usage
@@ -51,6 +52,38 @@ class MAVLinkInterface:
         # System and component IDs (set after connection)
         self.target_system = 1
         self.target_component = 1
+
+    @staticmethod
+    def find_available_ports() -> List[str]:
+        """
+        Auto-detect available serial ports for drone connection
+
+        Returns:
+            List of available serial port paths
+        """
+        ports = []
+
+        # Linux/Mac patterns
+        patterns = [
+            '/dev/ttyACM*',
+            '/dev/ttyUSB*',
+            '/dev/cu.usbmodem*',
+            '/dev/cu.usbserial*'
+        ]
+
+        for pattern in patterns:
+            ports.extend(glob.glob(pattern))
+
+        # Windows COM ports (if running on Windows)
+        try:
+            import serial.tools.list_ports
+            for port in serial.tools.list_ports.comports():
+                if port.device not in ports:
+                    ports.append(port.device)
+        except ImportError:
+            pass
+
+        return sorted(ports)
 
     def connect(self, verbose: bool = True) -> bool:
         """
