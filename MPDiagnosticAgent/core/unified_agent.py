@@ -18,12 +18,14 @@ try:
     from .knowledge_base import KnowledgeBase
     from .mavlink_interface import MAVLinkInterface
     from .github_dataset import GitHubDataset
+    from .bin_log_parser import BinLogParser
 except ImportError:
     from config import Config
     from log_analyzer import LogAnalyzer
     from knowledge_base import KnowledgeBase
     from mavlink_interface import MAVLinkInterface
     from github_dataset import GitHubDataset
+    from bin_log_parser import BinLogParser
 
 
 class FixAction:
@@ -60,6 +62,7 @@ class UnifiedAgent:
         self.log_analyzer = LogAnalyzer(config=self.config)
         self.knowledge_base = KnowledgeBase()
         self.github_dataset = GitHubDataset()
+        self.bin_parser = BinLogParser()
 
         # MAVLink interface (for auto-fix)
         self.mav = None
@@ -85,7 +88,7 @@ class UnifiedAgent:
             'info': {}
         }
 
-        # Analyze Mission Planner log
+        # Analyze Mission Planner log (.log file)
         if self.config.mp_log_path and self.config.mp_log_path.exists():
             prearm_errors = self.log_analyzer.find_prearm_errors()
 
@@ -100,6 +103,31 @@ class UnifiedAgent:
                 fixes = self._suggest_fixes(issue)
                 if fixes:
                     report['fixable_issues'].extend(fixes)
+
+        # ALSO analyze .bin dataflash logs (more comprehensive!)
+        bin_dir = Path.home() / ".local/share/Mission Planner/logs/QUADROTOR/1"
+        if bin_dir.exists():
+            try:
+                bin_prearms = self.bin_parser.extract_prearm_from_directory(bin_dir, max_logs=2)
+
+                for prearm_entry in bin_prearms:
+                    error_text = prearm_entry.get('text', '')
+
+                    # Avoid duplicates
+                    if any(error_text in e.get('error', '') for e in report['prearm_errors']):
+                        continue
+
+                    issue = self._analyze_error(error_text)
+                    issue['source'] = f"bin:{prearm_entry.get('source_file', 'unknown')}"
+                    report['prearm_errors'].append(issue)
+
+                    # Check if fixable
+                    fixes = self._suggest_fixes(issue)
+                    if fixes:
+                        report['fixable_issues'].extend(fixes)
+
+            except Exception as e:
+                print(f"⚠️ Error parsing .bin logs: {e}")
 
         return report
 
