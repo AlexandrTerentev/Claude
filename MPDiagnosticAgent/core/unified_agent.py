@@ -6,6 +6,7 @@ Combines log analysis, natural language Q&A, and auto-fix capabilities
 """
 
 import re
+import subprocess
 from pathlib import Path
 from typing import Optional, List, Dict, Tuple, Any
 from datetime import datetime
@@ -16,11 +17,13 @@ try:
     from .log_analyzer import LogAnalyzer
     from .knowledge_base import KnowledgeBase
     from .mavlink_interface import MAVLinkInterface
+    from .github_dataset import GitHubDataset
 except ImportError:
     from config import Config
     from log_analyzer import LogAnalyzer
     from knowledge_base import KnowledgeBase
     from mavlink_interface import MAVLinkInterface
+    from github_dataset import GitHubDataset
 
 
 class FixAction:
@@ -56,6 +59,7 @@ class UnifiedAgent:
         # Core components
         self.log_analyzer = LogAnalyzer(config=self.config)
         self.knowledge_base = KnowledgeBase()
+        self.github_dataset = GitHubDataset()
 
         # MAVLink interface (for auto-fix)
         self.mav = None
@@ -403,6 +407,55 @@ class UnifiedAgent:
 
         return fixes
 
+    def _get_relevant_docs(self, report: Dict[str, Any], query: str) -> str:
+        """
+        Get relevant documentation based on report and query
+
+        Args:
+            report: Analysis report
+            query: User question
+
+        Returns:
+            Relevant documentation context
+        """
+        docs = []
+
+        # Get docs for errors in report
+        if report['prearm_errors']:
+            # Extract error types
+            error_types = set()
+            for error in report['prearm_errors'][:3]:
+                error_text = error['error'].lower()
+                if 'battery' in error_text or 'batt' in error_text:
+                    error_types.add('battery')
+                if 'rc' in error_text:
+                    error_types.add('rc')
+                if 'gps' in error_text:
+                    error_types.add('gps')
+                if 'compass' in error_text or 'mag' in error_text:
+                    error_types.add('compass')
+                if 'ekf' in error_text:
+                    error_types.add('ekf')
+
+            # Get quick context for each type
+            for error_type in list(error_types)[:2]:  # Max 2 types
+                doc = self.github_dataset.get_quick_context(error_type)
+                docs.append(doc)
+
+        # Also check query for keywords
+        query_lower = query.lower()
+        for keyword in ['battery', 'rc', 'gps', 'compass', 'ekf', 'calibration']:
+            if keyword in query_lower and len(docs) < 2:
+                doc = self.github_dataset.get_quick_context(keyword)
+                if doc not in docs:
+                    docs.append(doc)
+
+        if not docs:
+            # Return general docs
+            docs.append(self.github_dataset.get_doc_links('prearm'))
+
+        return "\n\n".join(docs[:2])  # Max 2 doc sections
+
     def ask_claude_api(self, query: str, context: str = "") -> str:
         """
         Ask Claude AI with full drone context (REAL AI!)
@@ -424,13 +477,16 @@ class UnifiedAgent:
 PREARM ОШИБКИ ({len(report['prearm_errors'])}):
 {chr(10).join([e['error'] for e in report['prearm_errors'][:10]]) if report['prearm_errors'] else "Нет"}
 
-НАЙДЕНО ПРОБЛЕМ: {len(report['issues'])}
+НАЙДЕНО ПРОБЛЕМ: {len(report['prearm_errors'])}
 Fixable: {len(report['fixable_issues'])}
 
 ДОСТУПНЫЕ AUTO-FIX:
 {chr(10).join([f"- {fix.title} (severity: {fix.severity})" for fix in report['fixable_issues'][:5]]) if report['fixable_issues'] else "Нет"}
 
 {context}
+
+ДОКУМЕНТАЦИЯ ARDUPILOT:
+{self._get_relevant_docs(report, query)}
 
 ВОПРОС ПОЛЬЗОВАТЕЛЯ:
 {query}
@@ -445,7 +501,6 @@ Fixable: {len(report['fixable_issues'])}
 7. Ответ на русском"""
 
             # Call Claude CLI
-            import subprocess
             result = subprocess.run(
                 ["claude", full_context],
                 capture_output=True,
@@ -583,9 +638,9 @@ Fixable: {len(report['fixable_issues'])}
                 return answer
 
         else:
-            # Try Claude AI for intelligent response
+            # Try Claude AI for intelligent response (even if no logs!)
             try:
-                print("🧠 Пытаюсь спросить Claude AI...")
+                print("🧠 Спрашиваю Claude AI...")
                 ai_response = self.ask_claude_api(question)
 
                 # Check if it's an error message (fallback failed)
@@ -596,19 +651,20 @@ Fixable: {len(report['fixable_issues'])}
                         "• 'Почему дрон не взлетает?' - анализ PreArm ошибок\n"
                         "• 'Что означает \"RC not found\"?' - объяснение ошибок\n"
                         "• 'Как исправить?' - показать автоматические исправления\n"
-                        "• 'Показать логи' / 'Анализ' - вывести результаты анализа\n\n"
+                        "• 'Как настроить GPS/компас/RC?' - инструкции по настройке\n\n"
                         f"{ai_response}\n\n"
-                        "Задайте конкретный вопрос из списка выше!"
+                        "Задайте конкретный вопрос!"
                     )
                 else:
                     return ai_response
             except Exception as e:
                 return (
+                    f"❌ Ошибка AI: {e}\n\n"
                     "Я могу помочь с:\n"
                     "• 'Почему дрон не взлетает?' - анализ PreArm ошибок\n"
                     "• 'Что означает \"RC not found\"?' - объяснение ошибок\n"
                     "• 'Как исправить?' - показать автоматические исправления\n"
-                    "• 'Показать логи' / 'Анализ' - вывести результаты анализа\n\n"
+                    "• 'Как настроить GPS/компас/RC?' - инструкции по настройке\n\n"
                     "Задайте конкретный вопрос!"
                 )
 
