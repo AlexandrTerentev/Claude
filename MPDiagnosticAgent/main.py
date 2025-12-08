@@ -70,6 +70,7 @@ class MPDiagnosticApp:
         # State
         self.pending_fixes = []
         self.current_logs = []
+        self.selected_log_path = None  # For technical analysis
 
         # Create UI
         self.create_ui()
@@ -98,6 +99,7 @@ class MPDiagnosticApp:
         # Create tabs
         self.create_ai_assistant_tab()
         self.create_autofix_tab()
+        self.create_technical_analysis_tab()  # NEW!
         self.create_download_tab()
         self.create_settings_tab()
 
@@ -254,6 +256,80 @@ class MPDiagnosticApp:
 
         canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+    def create_technical_analysis_tab(self):
+        """Tab 3: Technical Analysis"""
+        tab = tk.Frame(self.notebook, bg=self.bg_color)
+        self.notebook.add(tab, text="🔬 Technical Analysis")
+
+        container = tk.Frame(tab, bg=self.bg_color)
+        container.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+
+        # Header
+        header = tk.Frame(container, bg=self.bg_color)
+        header.pack(fill=tk.X, pady=(0, 15))
+
+        tk.Label(header, text="🔬 Технический Анализ Логов",
+                bg=self.bg_color, fg=self.fg_color,
+                font=('Liberation Mono', 14, 'bold')).pack(side=tk.LEFT)
+
+        # Info
+        info_text = (
+            "Глубокий анализ настроек дрона: вибрации, PID, моторы, GPS.\n"
+            "Игнорирует базовые PreArm ошибки (батарея/RC)."
+        )
+        tk.Label(container, text=info_text,
+                bg=self.bg_color, fg=self.fg_color,
+                font=('Liberation Mono', 9), justify=tk.LEFT).pack(anchor='w', pady=(0, 15))
+
+        # File selection
+        file_frame = tk.Frame(container, bg=self.bg_color)
+        file_frame.pack(fill=tk.X, pady=(0, 15))
+
+        tk.Label(file_frame, text="Выбранный лог:",
+                bg=self.bg_color, fg=self.fg_color,
+                font=('Liberation Mono', 10)).pack(side=tk.LEFT, padx=(0, 10))
+
+        self.tech_log_var = tk.StringVar(value="(автоматически - последний >100KB)")
+        tk.Label(file_frame, textvariable=self.tech_log_var,
+                bg=self.input_bg, fg=self.warning_color,
+                font=('Liberation Mono', 9), padx=10, pady=5).pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        browse_btn = tk.Button(file_frame, text="📁 Выбрать файл",
+                              command=self.browse_log_file,
+                              bg=self.button_bg, fg='white',
+                              font=('Liberation Mono', 9, 'bold'),
+                              relief=tk.FLAT, padx=15, pady=5, cursor='hand2')
+        browse_btn.pack(side=tk.RIGHT, padx=(10, 0))
+
+        # Analyze button
+        analyze_btn = tk.Button(container, text="🔬 Анализировать Лог",
+                               command=self.run_technical_analysis,
+                               bg=self.success_color, fg='white',
+                               font=('Liberation Mono', 11, 'bold'),
+                               relief=tk.FLAT, padx=30, pady=10, cursor='hand2')
+        analyze_btn.pack(pady=(0, 15))
+
+        # Results area
+        results_frame = tk.Frame(container, bg=self.bg_color)
+        results_frame.pack(fill=tk.BOTH, expand=True)
+
+        # Scrollable results
+        canvas = tk.Canvas(results_frame, bg=self.bg_color, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(results_frame, orient="vertical", command=canvas.yview)
+        self.tech_results_container = tk.Frame(canvas, bg=self.bg_color)
+
+        self.tech_results_container.bind("<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+
+        canvas.create_window((0, 0), window=self.tech_results_container, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # Initially show help
+        self.show_tech_help()
 
     def create_download_tab(self):
         """Tab 3: Download Logs"""
@@ -655,6 +731,211 @@ class MPDiagnosticApp:
 
         except Exception as e:
             self.download_progress_label.config(text=f"✗ Error: {e}")
+
+    def show_tech_help(self):
+        """Show help text in technical analysis tab"""
+        for widget in self.tech_results_container.winfo_children():
+            widget.destroy()
+
+        help_text = tk.Label(self.tech_results_container,
+                            text="💡 Нажмите '🔬 Анализировать Лог' для начала\n\n"
+                                 "Анализируются:\n"
+                                 "• Вибрации (AccX/Y/Z, Clipping)\n"
+                                 "• Баланс моторов (PWM)\n"
+                                 "• PID настройки (Roll/Pitch/Yaw)\n"
+                                 "• GPS качество (спутники, HDOP)\n\n"
+                                 "Можно выбрать конкретный .bin файл\n"
+                                 "или использовать последний скачанный лог",
+                            bg=self.bg_color, fg=self.fg_color,
+                            font=('Liberation Mono', 10), justify=tk.LEFT,
+                            padx=50, pady=50)
+        help_text.pack(expand=True)
+
+    def browse_log_file(self):
+        """Browse for .bin log file"""
+        from tkinter import filedialog
+
+        # Start in download directory
+        download_dir = Path.home() / "missionplanner" / "logs"
+        if not download_dir.exists():
+            download_dir = Path.home()
+
+        filename = filedialog.askopenfilename(
+            title="Выберите .bin лог",
+            initialdir=str(download_dir),
+            filetypes=[("ArduPilot Logs", "*.bin"), ("All Files", "*.*")]
+        )
+
+        if filename:
+            self.selected_log_path = Path(filename)
+            self.tech_log_var.set(Path(filename).name)
+
+    def run_technical_analysis(self):
+        """Run technical analysis on selected or latest log"""
+        # Clear results
+        for widget in self.tech_results_container.winfo_children():
+            widget.destroy()
+
+        # Show progress
+        progress = tk.Label(self.tech_results_container,
+                           text="🔬 Анализирую лог...\nЭто может занять 10-30 секунд",
+                           bg=self.bg_color, fg=self.warning_color,
+                           font=('Liberation Mono', 12, 'bold'))
+        progress.pack(pady=50)
+        self.root.update()
+
+        try:
+            # Get analysis from agent
+            if hasattr(self, 'selected_log_path'):
+                # Use selected log
+                self.agent.downloaded_logs = [self.selected_log_path]
+
+            # Run analysis
+            result = self.agent._deep_technical_analysis()
+
+            # Parse result and display with action buttons
+            self.display_technical_results(result)
+
+        except Exception as e:
+            # Show error
+            for widget in self.tech_results_container.winfo_children():
+                widget.destroy()
+
+            error_label = tk.Label(self.tech_results_container,
+                                  text=f"❌ Ошибка анализа:\n\n{e}",
+                                  bg=self.bg_color, fg=self.error_color,
+                                  font=('Liberation Mono', 10))
+            error_label.pack(pady=50)
+
+    def display_technical_results(self, result_text: str):
+        """Display technical analysis results with action buttons"""
+        # Clear progress
+        for widget in self.tech_results_container.winfo_children():
+            widget.destroy()
+
+        # Parse result for recommendations and parameters
+        lines = result_text.split('\n')
+
+        # Display full text first
+        text_widget = scrolledtext.ScrolledText(
+            self.tech_results_container,
+            bg=self.input_bg, fg=self.fg_color,
+            font=('Liberation Mono', 9),
+            wrap=tk.WORD, height=20, relief=tk.FLAT,
+            padx=15, pady=15
+        )
+        text_widget.pack(fill=tk.BOTH, expand=True, pady=(0, 15))
+        text_widget.insert('1.0', result_text)
+        text_widget.config(state=tk.DISABLED)
+
+        # Extract recommendations with parameter changes
+        recommendations = self._parse_recommendations(result_text)
+
+        if recommendations:
+            tk.Label(self.tech_results_container,
+                    text="⚡ Быстрые действия:",
+                    bg=self.bg_color, fg=self.warning_color,
+                    font=('Liberation Mono', 11, 'bold')).pack(anchor='w', pady=(10, 5))
+
+            for i, rec in enumerate(recommendations):
+                self.create_recommendation_card(rec, i)
+
+    def _parse_recommendations(self, text: str) -> list:
+        """Parse recommendations from technical analysis"""
+        recommendations = []
+
+        # Look for parameter changes like "Roll P: 0.06 → 0.135"
+        import re
+
+        # Pattern: "Parameter: old → new"
+        param_pattern = r'([\w_]+)\s*(?:P|I|D)?:\s*([\d.]+)\s*→\s*\*?\*?([\d.]+)'
+
+        for match in re.finditer(param_pattern, text):
+            param_base = match.group(1).strip()
+            old_val = float(match.group(2))
+            new_val = float(match.group(3))
+
+            # Map to actual parameter names
+            param_map = {
+                'Roll': ['ATC_RAT_RLL_P', 'ATC_RAT_RLL_I', 'ATC_RAT_RLL_D'],
+                'Pitch': ['ATC_RAT_PIT_P', 'ATC_RAT_PIT_I', 'ATC_RAT_PIT_D'],
+                'Yaw': ['ATC_RAT_YAW_P', 'ATC_RAT_YAW_I']
+            }
+
+            # Try to determine which parameter (P/I/D)
+            context = text[max(0, match.start()-50):match.start()+50]
+
+            if param_base in param_map:
+                if ' P:' in context or 'P:' in match.group(0):
+                    param_name = param_map[param_base][0]
+                elif ' I:' in context or 'I:' in match.group(0):
+                    param_name = param_map[param_base][1]
+                elif ' D:' in context and len(param_map[param_base]) > 2:
+                    param_name = param_map[param_base][2]
+                else:
+                    continue
+
+                recommendations.append({
+                    'title': f"Изменить {param_name}",
+                    'description': f"{old_val} → {new_val}",
+                    'params': {param_name: new_val}
+                })
+
+        return recommendations
+
+    def create_recommendation_card(self, rec: dict, index: int):
+        """Create a recommendation card with apply button"""
+        card = tk.Frame(self.tech_results_container, bg=self.card_bg,
+                       relief=tk.RAISED, borderwidth=1)
+        card.pack(fill=tk.X, pady=5)
+
+        # Content frame
+        content = tk.Frame(card, bg=self.card_bg)
+        content.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=15, pady=10)
+
+        # Title
+        tk.Label(content, text=rec['title'],
+                bg=self.card_bg, fg=self.fg_color,
+                font=('Liberation Mono', 10, 'bold')).pack(anchor='w')
+
+        # Description
+        tk.Label(content, text=rec['description'],
+                bg=self.card_bg, fg=self.warning_color,
+                font=('Liberation Mono', 9)).pack(anchor='w', pady=(5, 0))
+
+        # Apply button
+        apply_btn = tk.Button(card, text="✓ Применить",
+                             command=lambda r=rec: self.apply_recommendation(r),
+                             bg=self.accent_color, fg='white',
+                             font=('Liberation Mono', 9, 'bold'),
+                             relief=tk.FLAT, padx=20, pady=8, cursor='hand2')
+        apply_btn.pack(side=tk.RIGHT, padx=15, pady=10)
+
+    def apply_recommendation(self, rec: dict):
+        """Apply a recommendation (change parameters)"""
+        if not self.connected:
+            messagebox.showwarning("Не подключен",
+                "Подключитесь к дрону перед применением изменений!")
+            return
+
+        params_list = "\n".join([f"• {k} = {v}" for k, v in rec['params'].items()])
+        if not messagebox.askyesno("Подтвердите",
+                                   f"{rec['title']}\n\n{params_list}\n\nПрименить изменения?"):
+            return
+
+        self.add_agent_message(f"⚡ Применяю: {rec['title']}...")
+
+        # Apply parameters
+        success_count = 0
+        for param_name, param_value in rec['params'].items():
+            if self.agent.mav.set_parameter(param_name, param_value, 9):  # MAV_PARAM_TYPE_REAL32
+                success_count += 1
+
+        if success_count == len(rec['params']):
+            self.add_agent_message(f"✅ Применено успешно! Можете тестировать дрон.")
+            messagebox.showinfo("Успех", f"✅ {rec['title']}\n\nПараметры обновлены!\nМожете тестировать дрон.")
+        else:
+            self.add_agent_message(f"⚠️ Применено частично ({success_count}/{len(rec['params'])})")
 
     def run(self):
         """Run application"""
