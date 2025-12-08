@@ -403,6 +403,74 @@ class UnifiedAgent:
 
         return fixes
 
+    def ask_claude_api(self, query: str, context: str = "") -> str:
+        """
+        Ask Claude AI with full drone context (REAL AI!)
+
+        Uses Claude CLI to get intelligent responses
+        """
+        try:
+            # Gather full drone context
+            report = self.analyze_current_state()
+
+            # Build comprehensive context
+            full_context = f"""Ты эксперт по диагностике дронов ArduPilot/Mission Planner.
+
+ВАЖНО: Если не можешь найти решение - ЧЕСТНО скажи "Я не знаю какого хрена не работает, по докам должно работать".
+
+СТАТУС ДРОНА:
+{"✅ Подключен к MAVLink" if self.mav and self.mav.is_connected() else "❌ Не подключен"}
+
+PREARM ОШИБКИ ({len(report['prearm_errors'])}):
+{chr(10).join([e['error'] for e in report['prearm_errors'][:10]]) if report['prearm_errors'] else "Нет"}
+
+НАЙДЕНО ПРОБЛЕМ: {len(report['issues'])}
+Fixable: {len(report['fixable_issues'])}
+
+ДОСТУПНЫЕ AUTO-FIX:
+{chr(10).join([f"- {fix.title} (severity: {fix.severity})" for fix in report['fixable_issues'][:5]]) if report['fixable_issues'] else "Нет"}
+
+{context}
+
+ВОПРОС ПОЛЬЗОВАТЕЛЯ:
+{query}
+
+ТРЕБОВАНИЯ К ОТВЕТУ:
+1. Проанализируй ВСЕ данные: статус дрона, логи, ошибки
+2. Проверь документацию ArduPilot если нужно
+3. Дай КОНКРЕТНОЕ решение с шагами
+4. Если это про полёт - посмотри на логи и параметры PID/настройки
+5. ЕСЛИ НЕ ЗНАЕШЬ - так и скажи: "Я не знаю какого хрена не работает"
+6. Форматируй с маркерами ✓/✗/⚠️ для читаемости
+7. Ответ на русском"""
+
+            # Call Claude CLI
+            import subprocess
+            result = subprocess.run(
+                ["claude", full_context],
+                capture_output=True,
+                text=True,
+                timeout=90
+            )
+
+            if result.stdout:
+                return result.stdout.strip()
+            else:
+                return "❌ Claude не вернул ответа (попробуйте переформулировать вопрос)"
+
+        except FileNotFoundError:
+            return (
+                "❌ Claude CLI не установлен\n\n"
+                "Установите:\n"
+                "npm install -g @anthropics/claude-cli\n"
+                "claude auth login\n\n"
+                "Используется fallback режим (pattern matching)"
+            )
+        except subprocess.TimeoutExpired:
+            return "❌ Таймаут Claude (>90 сек) - попробуйте упростить вопрос"
+        except Exception as e:
+            return f"❌ Ошибка Claude API: {e}\n\nИспользуется fallback режим"
+
     def answer_question(self, question: str) -> str:
         """
         Answer natural language questions about logs/issues
@@ -515,15 +583,34 @@ class UnifiedAgent:
                 return answer
 
         else:
-            # Generic response with suggestions
-            return (
-                "Я могу помочь с:\n"
-                "• 'Почему дрон не взлетает?' - анализ PreArm ошибок\n"
-                "• 'Что означает \"RC not found\"?' - объяснение ошибок\n"
-                "• 'Как исправить?' - показать автоматические исправления\n"
-                "• 'Показать логи' / 'Анализ' - вывести результаты анализа\n\n"
-                "Задайте конкретный вопрос!"
-            )
+            # Try Claude AI for intelligent response
+            try:
+                print("🧠 Пытаюсь спросить Claude AI...")
+                ai_response = self.ask_claude_api(question)
+
+                # Check if it's an error message (fallback failed)
+                if ai_response.startswith("❌"):
+                    # Fallback to pattern matching help
+                    return (
+                        "Я могу помочь с:\n"
+                        "• 'Почему дрон не взлетает?' - анализ PreArm ошибок\n"
+                        "• 'Что означает \"RC not found\"?' - объяснение ошибок\n"
+                        "• 'Как исправить?' - показать автоматические исправления\n"
+                        "• 'Показать логи' / 'Анализ' - вывести результаты анализа\n\n"
+                        f"{ai_response}\n\n"
+                        "Задайте конкретный вопрос из списка выше!"
+                    )
+                else:
+                    return ai_response
+            except Exception as e:
+                return (
+                    "Я могу помочь с:\n"
+                    "• 'Почему дрон не взлетает?' - анализ PreArm ошибок\n"
+                    "• 'Что означает \"RC not found\"?' - объяснение ошибок\n"
+                    "• 'Как исправить?' - показать автоматические исправления\n"
+                    "• 'Показать логи' / 'Анализ' - вывести результаты анализа\n\n"
+                    "Задайте конкретный вопрос!"
+                )
 
     def connect_to_drone(self, port: Optional[str] = None) -> bool:
         """Connect to drone for auto-fix"""
