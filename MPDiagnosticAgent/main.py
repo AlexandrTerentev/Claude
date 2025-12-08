@@ -635,7 +635,21 @@ class MPDiagnosticApp:
             if result:
                 self.download_progress_label.config(
                     text=f"✅ Downloaded: {result.name}")
-                messagebox.showinfo("Success", f"Log downloaded!\n{result}")
+
+                # Register log for analysis
+                self.agent.add_downloaded_log(result)
+
+                # Show success with analysis prompt
+                msg = f"✅ Лог скачан: {result.name}\n\n"
+                msg += "🔍 Лог зарегистрирован для анализа!\n\n"
+                msg += "Перейдите на вкладку '💬 AI Assistant' и напишите:\n"
+                msg += "'проанализируй скачанный лог'\n\n"
+                msg += "или перейдите на '🔧 Auto-Fix' и нажмите 'Refresh'"
+
+                messagebox.showinfo("Лог скачан!", msg)
+
+                # Auto-refresh fixes tab
+                self.root.after(500, self.refresh_fixes)
             else:
                 self.download_progress_label.config(text="✗ Download failed")
 

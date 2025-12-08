@@ -70,11 +70,27 @@ class UnifiedAgent:
         # Session state
         self.current_issues = []
         self.pending_fixes = []
+        self.chat_history = []  # Store Q&A history
         self.conversation_context = []
+
+        # Downloaded logs tracking
+        self.downloaded_logs = []  # List of paths to analyze
+
+    def add_downloaded_log(self, log_path: Path) -> None:
+        """
+        Register a downloaded log file for analysis
+
+        Args:
+            log_path: Path to downloaded .bin file
+        """
+        if log_path.exists() and log_path not in self.downloaded_logs:
+            self.downloaded_logs.append(log_path)
+            print(f"✓ Registered log for analysis: {log_path.name}")
 
     def analyze_current_state(self) -> Dict[str, Any]:
         """
         Analyze current drone state from all available sources
+        INCLUDING downloaded logs!
 
         Returns:
             Comprehensive diagnostic report
@@ -87,6 +103,18 @@ class UnifiedAgent:
             'fixable_issues': [],
             'info': {}
         }
+
+        # AUTO-SCAN: Find all downloaded logs in download directory
+        download_dir = Path.home() / "missionplanner" / "logs"
+        if download_dir.exists():
+            # Find all .bin files from last 7 days
+            import time
+            week_ago = time.time() - (7 * 24 * 60 * 60)
+
+            for bin_file in download_dir.rglob("*.bin"):
+                if bin_file.stat().st_mtime > week_ago and bin_file.stat().st_size > 0:
+                    if bin_file not in self.downloaded_logs:
+                        self.downloaded_logs.append(bin_file)
 
         # Analyze Mission Planner log (.log file)
         if self.config.mp_log_path and self.config.mp_log_path.exists():
@@ -104,7 +132,40 @@ class UnifiedAgent:
                 if fixes:
                     report['fixable_issues'].extend(fixes)
 
-        # ALSO analyze .bin dataflash logs (more comprehensive!)
+        # PRIORITY: Analyze downloaded logs (from Download Logs tab)
+        if self.downloaded_logs:
+            print(f"🔍 Analyzing {len(self.downloaded_logs)} downloaded log(s)...")
+            # Sort by modification time (newest first)
+            sorted_logs = sorted(self.downloaded_logs, key=lambda x: x.stat().st_mtime, reverse=True)
+
+            for log_path in sorted_logs[:5]:  # Analyze only 5 most recent logs
+                try:
+                    print(f"  📄 Parsing: {log_path.name} ({log_path.stat().st_size / 1024:.1f} KB)")
+                    parsed = self.bin_parser.parse_log(log_path)
+
+                    if parsed and parsed.get('prearm_errors'):
+                        print(f"    ✓ Found {len(parsed['prearm_errors'])} PreArm errors in {log_path.name}")
+                        for prearm_entry in parsed['prearm_errors']:
+                            error_text = prearm_entry.get('text', '')
+
+                            # Avoid duplicates
+                            if any(error_text in e.get('error', '') for e in report['prearm_errors']):
+                                continue
+
+                            issue = self._analyze_error(error_text)
+                            issue['source'] = f"downloaded:{log_path.name}"
+                            report['prearm_errors'].append(issue)
+
+                            # Check if fixable
+                            fixes = self._suggest_fixes(issue)
+                            if fixes:
+                                report['fixable_issues'].extend(fixes)
+                    else:
+                        print(f"    ✓ No PreArm errors in {log_path.name}")
+                except Exception as e:
+                    print(f"⚠️ Error parsing downloaded log {log_path.name}: {e}")
+
+        # ALSO analyze .bin dataflash logs from Mission Planner directory
         bin_dir = Path.home() / ".local/share/Mission Planner/logs/QUADROTOR/1"
         if bin_dir.exists():
             try:
@@ -435,6 +496,231 @@ class UnifiedAgent:
 
         return fixes
 
+    def _deep_technical_analysis(self) -> str:
+        """
+        Deep technical analysis of logs - vibrations, PID, motors, etc.
+        SKIPS basic PreArm errors, focuses on tuning and performance
+        """
+        # Scan for downloaded logs
+        download_dir = Path.home() / "missionplanner" / "logs"
+        if download_dir.exists():
+            import time
+            week_ago = time.time() - (7 * 24 * 60 * 60)
+            for bin_file in download_dir.rglob("*.bin"):
+                if bin_file.stat().st_mtime > week_ago and bin_file.stat().st_size > 0:
+                    if bin_file not in self.downloaded_logs:
+                        self.downloaded_logs.append(bin_file)
+
+        if not self.downloaded_logs:
+            return "❌ Не найдено скачанных .bin логов для анализа.\n\nСкачайте логи через вкладку '📥 Download Logs'"
+
+        # Get most recent log with decent size (>100KB = actual flight)
+        valid_logs = [log for log in self.downloaded_logs if log.stat().st_size > 100_000]
+        if not valid_logs:
+            return "❌ Найдены только маленькие логи (<100KB).\n\nСкачайте лог с реального полёта/теста моторов."
+
+        # Sort by modification time
+        latest_log = sorted(valid_logs, key=lambda x: x.stat().st_mtime, reverse=True)[0]
+
+        print(f"🔬 Глубокий анализ: {latest_log.name} ({latest_log.stat().st_size / 1024:.1f} KB)")
+
+        # Parse the log
+        try:
+            parsed = self.bin_parser.parse_log(latest_log)
+        except Exception as e:
+            return f"❌ Ошибка парсинга лога: {e}"
+
+        # Extract technical metrics from log
+        tech_data = self._extract_technical_metrics(parsed)
+
+        # Get GitHub docs context for tuning
+        docs_context = self._get_tuning_docs_context()
+
+        # Ask Claude for TECHNICAL analysis (not PreArm!)
+        tech_prompt = f"""Ты эксперт по настройке ArduPilot. Проанализируй ТЕХНИЧЕСКИЕ параметры лога.
+
+ДАННЫЕ ИЗ ЛОГА "{latest_log.name}":
+{tech_data}
+
+GITHUB ДОКУМЕНТАЦИЯ:
+{docs_context}
+
+ЗАДАЧА:
+Проанализируй настройки и производительность дрона. ИГНОРИРУЙ PreArm ошибки (RC/battery).
+Сосредоточься на:
+- Вибрации (IMU noise)
+- Настройки PID
+- Эффективность моторов
+- Качество GPS/EKF
+- Рекомендации по улучшению
+
+ФОРМАТ ОТВЕТА:
+## 🔧 Технический Аудит
+
+**Вибрации:** [оценка + норма из GitHub]
+**PID настройки:** [текущие значения + рекомендации]
+**Моторы:** [баланс, эффективность]
+**GPS/EKF:** [качество]
+
+**Рекомендации:**
+1. [конкретное действие]
+2. [конкретное действие]
+
+Будь кратким, конкретным, с цифрами."""
+
+        try:
+            result = subprocess.run(
+                ["claude", tech_prompt],
+                capture_output=True,
+                text=True,
+                encoding='utf-8',
+                timeout=60
+            )
+
+            if result.stdout:
+                return f"🔬 ТЕХНИЧЕСКИЙ АНАЛИЗ: {latest_log.name}\n\n{result.stdout.strip()}"
+            else:
+                return "❌ Claude не вернул ответа"
+
+        except FileNotFoundError:
+            # Fallback: basic analysis without AI
+            return f"🔬 ТЕХНИЧЕСКИЙ АНАЛИЗ: {latest_log.name}\n\n{tech_data}\n\n⚠️ Claude CLI не установлен для умного анализа"
+        except Exception as e:
+            return f"❌ Ошибка AI: {e}"
+
+    def _extract_technical_metrics(self, parsed: Dict[str, Any]) -> str:
+        """
+        Extract technical metrics from parsed log
+        Focus on tuning-relevant data
+        """
+        metrics = []
+
+        # Message type stats
+        if 'stats' in parsed and 'message_types' in parsed['stats']:
+            msg_types = parsed['stats']['message_types']
+            metrics.append(f"📊 Сообщений: {parsed['stats']['total_messages']}")
+            important = ['VIBE', 'RCOU', 'GPS', 'ATT', 'IMU', 'BARO']
+            for mtype in important:
+                if mtype in msg_types:
+                    metrics.append(f"  • {mtype}: {msg_types[mtype]}")
+
+        # VIBRATIONS
+        if 'technical' in parsed and parsed['technical']['vibrations']:
+            vibes = parsed['technical']['vibrations']
+            # Calculate average vibrations
+            avg_x = sum(v['VibeX'] for v in vibes) / len(vibes)
+            avg_y = sum(v['VibeY'] for v in vibes) / len(vibes)
+            avg_z = sum(v['VibeZ'] for v in vibes) / len(vibes)
+            max_clips = max(max(v['Clip0'], v['Clip1'], v['Clip2']) for v in vibes)
+
+            metrics.append(f"\n🔊 ВИБРАЦИИ (средние):")
+            metrics.append(f"  • X: {avg_x:.2f} m/s² (норма <30)")
+            metrics.append(f"  • Y: {avg_y:.2f} m/s² (норма <30)")
+            metrics.append(f"  • Z: {avg_z:.2f} m/s² (норма <30)")
+            metrics.append(f"  • Clipping: {max_clips} (норма 0)")
+
+            # Warning if bad
+            if max(avg_x, avg_y, avg_z) > 30:
+                metrics.append(f"  ⚠️ ВЫСОКИЕ ВИБРАЦИИ!")
+            if max_clips > 0:
+                metrics.append(f"  ⚠️ ACCELEROMETER CLIPPING!")
+
+        # MOTORS
+        if 'technical' in parsed and parsed['technical']['motors']:
+            motors = parsed['technical']['motors']
+            # Sample 10% of data to reduce processing
+            sample = motors[::max(1, len(motors) // 100)]
+
+            if sample:
+                avg_m1 = sum(m['C1'] for m in sample) / len(sample)
+                avg_m2 = sum(m['C2'] for m in sample) / len(sample)
+                avg_m3 = sum(m['C3'] for m in sample) / len(sample)
+                avg_m4 = sum(m['C4'] for m in sample) / len(sample)
+
+                avg_all = (avg_m1 + avg_m2 + avg_m3 + avg_m4) / 4
+
+                metrics.append(f"\n🚁 МОТОРЫ (PWM средние):")
+                metrics.append(f"  • M1: {avg_m1:.0f}")
+                metrics.append(f"  • M2: {avg_m2:.0f}")
+                metrics.append(f"  • M3: {avg_m3:.0f}")
+                metrics.append(f"  • M4: {avg_m4:.0f}")
+                metrics.append(f"  • Средний: {avg_all:.0f}")
+
+                # Check balance (motors should be within 10% of each other)
+                max_diff = max(abs(avg_m1 - avg_all), abs(avg_m2 - avg_all),
+                              abs(avg_m3 - avg_all), abs(avg_m4 - avg_all))
+                balance_pct = (max_diff / avg_all) * 100 if avg_all > 0 else 0
+
+                metrics.append(f"  • Баланс: ±{balance_pct:.1f}% (норма <10%)")
+                if balance_pct > 10:
+                    metrics.append(f"  ⚠️ ДИСБАЛАНС МОТОРОВ!")
+
+        # GPS
+        if 'technical' in parsed and parsed['technical']['gps']:
+            gps_data = parsed['technical']['gps']
+            # Get last GPS status
+            last_gps = gps_data[-1]
+
+            metrics.append(f"\n🛰️ GPS:")
+            metrics.append(f"  • Satellites: {last_gps['NSats']} (норма >10)")
+            metrics.append(f"  • HDOP: {last_gps['HDop']:.2f} (норма <2.0)")
+            metrics.append(f"  • Status: {last_gps['Status']}")
+
+            if last_gps['NSats'] < 10:
+                metrics.append(f"  ⚠️ Мало спутников")
+            if last_gps['HDop'] > 2.0:
+                metrics.append(f"  ⚠️ Плохая точность GPS")
+
+        # PARAMETERS (PID values)
+        if 'parameters' in parsed:
+            params = parsed['parameters']
+            pid_params = {}
+
+            # Look for PID values
+            for key in ['ATC_RAT_PIT_P', 'ATC_RAT_PIT_I', 'ATC_RAT_PIT_D',
+                       'ATC_RAT_RLL_P', 'ATC_RAT_RLL_I', 'ATC_RAT_RLL_D',
+                       'ATC_RAT_YAW_P', 'ATC_RAT_YAW_I']:
+                if key in params:
+                    pid_params[key] = params[key]
+
+            if pid_params:
+                metrics.append(f"\n⚙️ PID НАСТРОЙКИ:")
+                metrics.append(f"  • Roll P: {pid_params.get('ATC_RAT_RLL_P', 'N/A')}")
+                metrics.append(f"  • Roll I: {pid_params.get('ATC_RAT_RLL_I', 'N/A')}")
+                metrics.append(f"  • Roll D: {pid_params.get('ATC_RAT_RLL_D', 'N/A')}")
+                metrics.append(f"  • Pitch P: {pid_params.get('ATC_RAT_PIT_P', 'N/A')}")
+                metrics.append(f"  • Yaw P: {pid_params.get('ATC_RAT_YAW_P', 'N/A')}")
+
+        if not metrics:
+            metrics.append("⚠️ Недостаточно технических данных")
+            metrics.append(f"Всего сообщений: {parsed.get('stats', {}).get('total_messages', 0)}")
+
+        return "\n".join(metrics)
+
+    def _get_tuning_docs_context(self) -> str:
+        """
+        Get GitHub documentation context for tuning
+        """
+        # Get tuning-related docs from GitHub dataset
+        topics = ['vibration', 'pid', 'motor', 'tuning']
+        docs = []
+
+        for topic in topics:
+            doc = self.github_dataset.get_quick_context(topic)
+            if doc:
+                docs.append(doc)
+
+        if not docs:
+            docs.append("""
+БАЗОВЫЕ НОРМЫ (из ArduPilot Wiki):
+- Вибрации: AccX/Y/Z < 30 m/s², Clip count = 0
+- PID: начальные значения зависят от размера дрона
+- Моторы: баланс ±10%, throttle hover ~50%
+- GPS: HDOP < 2.0, satellites > 10
+            """)
+
+        return "\n\n".join(docs[:2])  # Max 2 doc sections
+
     def _get_relevant_docs(self, report: Dict[str, Any], query: str) -> str:
         """
         Get relevant documentation based on report and query
@@ -494,46 +780,40 @@ class UnifiedAgent:
             # Gather full drone context
             report = self.analyze_current_state()
 
-            # Build comprehensive context
-            full_context = f"""Ты эксперт по диагностике дронов ArduPilot/Mission Planner.
+            # Build CONCISE context (reduce timeout issues)
+            # Only include relevant errors and docs
+            error_summary = ""
+            if report['prearm_errors']:
+                # Group similar errors
+                unique_errors = []
+                seen = set()
+                for e in report['prearm_errors'][:5]:  # Max 5 errors
+                    err_type = e.get('type', 'unknown')
+                    if err_type not in seen:
+                        unique_errors.append(e['error'][:80])  # Truncate long errors
+                        seen.add(err_type)
+                error_summary = chr(10).join([f"• {e}" for e in unique_errors])
+            else:
+                error_summary = "Нет ошибок"
 
-ВАЖНО: Если не можешь найти решение - ЧЕСТНО скажи "Я не знаю какого хрена не работает, по докам должно работать".
+            full_context = f"""Ты эксперт ArduPilot. Дрон: {"✅ подключен" if self.mav and self.mav.is_connected() else "❌ не подключен"}
 
-СТАТУС ДРОНА:
-{"✅ Подключен к MAVLink" if self.mav and self.mav.is_connected() else "❌ Не подключен"}
+ОШИБКИ ({len(report['prearm_errors'])}):
+{error_summary}
 
-PREARM ОШИБКИ ({len(report['prearm_errors'])}):
-{chr(10).join([e['error'] for e in report['prearm_errors'][:10]]) if report['prearm_errors'] else "Нет"}
+ИСПРАВЛЕНИЯ: {len(report['fixable_issues'])} доступно
 
-НАЙДЕНО ПРОБЛЕМ: {len(report['prearm_errors'])}
-Fixable: {len(report['fixable_issues'])}
+ВОПРОС: {query}
 
-ДОСТУПНЫЕ AUTO-FIX:
-{chr(10).join([f"- {fix.title} (severity: {fix.severity})" for fix in report['fixable_issues'][:5]]) if report['fixable_issues'] else "Нет"}
+ОТВЕТ (кратко, по делу, с маркерами ✓/✗):"""
 
-{context}
-
-ДОКУМЕНТАЦИЯ ARDUPILOT:
-{self._get_relevant_docs(report, query)}
-
-ВОПРОС ПОЛЬЗОВАТЕЛЯ:
-{query}
-
-ТРЕБОВАНИЯ К ОТВЕТУ:
-1. Проанализируй ВСЕ данные: статус дрона, логи, ошибки
-2. Проверь документацию ArduPilot если нужно
-3. Дай КОНКРЕТНОЕ решение с шагами
-4. Если это про полёт - посмотри на логи и параметры PID/настройки
-5. ЕСЛИ НЕ ЗНАЕШЬ - так и скажи: "Я не знаю какого хрена не работает"
-6. Форматируй с маркерами ✓/✗/⚠️ для читаемости
-7. Ответ на русском"""
-
-            # Call Claude CLI
+            # Call Claude CLI with UTF-8 encoding and SHORTER timeout
             result = subprocess.run(
                 ["claude", full_context],
                 capture_output=True,
                 text=True,
-                timeout=90
+                encoding='utf-8',
+                timeout=60  # Reduced from 90 to 60 seconds
             )
 
             if result.stdout:
@@ -550,7 +830,7 @@ Fixable: {len(report['fixable_issues'])}
                 "Используется fallback режим (pattern matching)"
             )
         except subprocess.TimeoutExpired:
-            return "❌ Таймаут Claude (>90 сек) - попробуйте упростить вопрос"
+            return "❌ Таймаут Claude API (>60 сек)\n\nПопробуйте:\n• Упростить вопрос\n• Спросить конкретнее\n• Использовать pattern matching (встроенный анализ)"
         except Exception as e:
             return f"❌ Ошибка Claude API: {e}\n\nИспользуется fallback режим"
 
@@ -627,41 +907,99 @@ Fixable: {len(report['fixable_issues'])}
             else:
                 return "✅ Автоматических исправлений не требуется."
 
-        elif 'показать' in question_lower or 'покажи' in question_lower or 'показат' in question_lower or 'поанализ' in question_lower or 'анализ' in question_lower:
-            # Show logs or analyze
-            if 'лог' in question_lower or 'log' in question_lower:
-                # Show log entries
-                prearm_errors = self.log_analyzer.find_prearm_errors()
-                if prearm_errors:
-                    # Extract text from error entries
-                    error_texts = []
-                    for error in prearm_errors[:10]:
-                        if isinstance(error, dict):
-                            error_texts.append(error.get('text', str(error)))
-                        else:
-                            error_texts.append(str(error))
-                    return f"📋 Найдено {len(prearm_errors)} PreArm ошибок:\n\n" + "\n".join(error_texts)
-                else:
-                    return "✅ PreArm ошибок не найдено в логах."
-            else:
-                # Show analysis results
-                report = self.analyze_current_state()
+        elif 'техническ' in question_lower or 'настройк' in question_lower or 'вибрац' in question_lower or 'pid' in question_lower or 'гироскоп' in question_lower or 'мотор' in question_lower or 'двигател' in question_lower:
+            # DEEP TECHNICAL ANALYSIS - skip PreArm, focus on tuning
+            return self._deep_technical_analysis()
+
+        elif 'показать' in question_lower or 'покажи' in question_lower or 'показат' in question_lower or 'поанализ' in question_lower or 'анализ' in question_lower or 'скачал' in question_lower or 'вывод' in question_lower:
+            # Analyze and make conclusions
+            report = self.analyze_current_state()
+
+            # Ask Claude for smart analysis with conclusions
+            try:
+                print("🧠 Анализирую через Claude AI...")
+
+                # Build concise error summary
+                error_types = {}
+                for err in report['prearm_errors']:
+                    etype = err.get('type', 'unknown')
+                    error_types[etype] = error_types.get(etype, 0) + 1
+
+                error_type_summary = ", ".join([f"{k}:{v}" for k, v in list(error_types.items())[:5]])
+
+                analysis_prompt = f"""Дрон: {len(report['prearm_errors'])} ошибок ({error_type_summary})
+
+Примеры: {chr(10).join([f"- {err['error'][:60]}" for err in report['prearm_errors'][:3]])}
+
+ВЫВОД (2-3 предложения): главная проблема, можно ли взлетать, что делать?"""
+                # Use ask_claude_api for analysis
+                ai_analysis = self.ask_claude_api(analysis_prompt)
+
+                # Format response with workflow
+                answer = f"🔍 АНАЛИЗ ЗАВЕРШЁН\n\n"
+                answer += f"📊 Статистика:\n"
+                answer += f"• Найдено ошибок: {len(report['prearm_errors'])}\n"
+                answer += f"• Доступно исправлений: {len(report['fixable_issues'])}\n"
+
+                # Show sources with details
+                if self.downloaded_logs:
+                    answer += f"• Проанализировано скачанных логов: {len(self.downloaded_logs)}\n"
+                    # Show top 3 most recent logs
+                    recent_logs = sorted(self.downloaded_logs, key=lambda x: x.stat().st_mtime, reverse=True)[:3]
+                    for log in recent_logs:
+                        size_kb = log.stat().st_size / 1024
+                        answer += f"  - {log.name} ({size_kb:.1f} KB)\n"
+
+                answer += f"\n💡 ВЫВОД:\n{ai_analysis}\n\n"
+
+                # Next steps workflow
+                if report['fixable_issues']:
+                    answer += "═══════════════════════════════════════\n"
+                    answer += "📋 СЛЕДУЮЩИЕ ШАГИ:\n\n"
+                    answer += f"1️⃣ Посмотрите вкладку '🔧 Auto-Fix' - найдено {len(report['fixable_issues'])} исправлений\n\n"
+
+                    if not self.mav or not self.mav.is_connected():
+                        answer += "2️⃣ ⚠️ ПОДКЛЮЧИТЕ ДРОН для применения исправлений:\n"
+                        answer += "   • Выберите порт в верхней панели\n"
+                        answer += "   • Нажмите 'Connect'\n\n"
+                        answer += "3️⃣ После подключения - нажмите 'Apply Fix' на нужном исправлении\n"
+                    else:
+                        answer += "2️⃣ ✅ Дрон подключен! Можете применять исправления\n"
+                        answer += "3️⃣ Нажмите 'Apply Fix' на нужном исправлении\n"
+
+                    answer += "\n═══════════════════════════════════════"
+
+                return answer
+
+            except Exception as e:
+                # Fallback to simple analysis
                 answer = "🔍 Результаты анализа:\n\n"
 
                 if report['prearm_errors']:
-                    answer += f"❌ PreArm ошибки ({len(report['prearm_errors'])}):\n"
-                    for i, error in enumerate(report['prearm_errors'][:5], 1):
-                        answer += f"  {i}. {error['error']}\n"
+                    # Group errors by type
+                    error_types = {}
+                    for err in report['prearm_errors']:
+                        etype = err.get('type', 'unknown')
+                        error_types[etype] = error_types.get(etype, 0) + 1
+
+                    answer += f"❌ Найдено {len(report['prearm_errors'])} PreArm ошибок:\n"
+                    for etype, count in error_types.items():
+                        answer += f"  • {etype}: {count} шт.\n"
                     answer += "\n"
+
+                    answer += "💡 ВЫВОД:\n"
+                    main_issue = max(error_types.items(), key=lambda x: x[1])
+                    answer += f"Основная проблема: {main_issue[0]} ({main_issue[1]} ошибок)\n\n"
 
                 if report['fixable_issues']:
-                    answer += f"🔧 Доступно исправлений: {len(report['fixable_issues'])}\n"
-                    for i, fix in enumerate(report['fixable_issues'][:3], 1):
-                        answer += f"  {i}. {fix.title} ({fix.severity})\n"
-                    answer += "\n"
+                    answer += f"🔧 Доступно {len(report['fixable_issues'])} автоматических исправлений\n\n"
 
-                if report['status'] == 'healthy':
-                    answer += "✅ Система в норме!"
+                    if not self.mav or not self.mav.is_connected():
+                        answer += "⚠️ ПОДКЛЮЧИТЕ ДРОН для применения исправлений!\n"
+                    else:
+                        answer += "✅ Дрон подключен - можете применять исправления\n"
+
+                    answer += "Перейдите на вкладку 'Auto-Fix' для применения.\n"
 
                 return answer
 
@@ -695,6 +1033,148 @@ Fixable: {len(report['fixable_issues'])}
                     "• 'Как настроить GPS/компас/RC?' - инструкции по настройке\n\n"
                     "Задайте конкретный вопрос!"
                 )
+
+    def save_chat_history(self, filename: Optional[Path] = None) -> bool:
+        """
+        Save chat history to file
+
+        Args:
+            filename: Output file (auto-generated if None)
+
+        Returns:
+            True if successful
+        """
+        if not self.chat_history:
+            return False
+
+        try:
+            if filename is None:
+                history_dir = Path.home() / ".mpdiag" / "chat_history"
+                history_dir.mkdir(parents=True, exist_ok=True)
+
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                filename = history_dir / f"chat_{timestamp}.json"
+
+            import json
+            with open(filename, 'w', encoding='utf-8') as f:
+                json.dump(self.chat_history, f, indent=2, ensure_ascii=False)
+
+            print(f"✓ Chat history saved to {filename}")
+            return True
+
+        except Exception as e:
+            print(f"✗ Error saving chat history: {e}")
+            return False
+
+    def load_chat_history(self, filename: Path) -> bool:
+        """Load chat history from file"""
+        try:
+            import json
+            with open(filename, 'r', encoding='utf-8') as f:
+                self.chat_history = json.load(f)
+            print(f"✓ Loaded {len(self.chat_history)} messages")
+            return True
+        except Exception as e:
+            print(f"✗ Error loading history: {e}")
+            return False
+
+    def export_report(self, filename: Optional[Path] = None, format: str = "markdown") -> bool:
+        """
+        Export diagnostic report with solutions
+
+        Args:
+            filename: Output file
+            format: "markdown" or "json"
+
+        Returns:
+            True if successful
+        """
+        try:
+            report = self.analyze_current_state()
+
+            if filename is None:
+                export_dir = Path.home() / ".mpdiag" / "reports"
+                export_dir.mkdir(parents=True, exist_ok=True)
+
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                ext = "md" if format == "markdown" else "json"
+                filename = export_dir / f"diagnostic_report_{timestamp}.{ext}"
+
+            if format == "markdown":
+                content = self._generate_markdown_report(report)
+            else:
+                import json
+                content = json.dumps(report, indent=2, ensure_ascii=False, default=str)
+
+            with open(filename, 'w', encoding='utf-8') as f:
+                f.write(content)
+
+            print(f"✓ Report exported to {filename}")
+            return True
+
+        except Exception as e:
+            print(f"✗ Error exporting report: {e}")
+            return False
+
+    def _generate_markdown_report(self, report: Dict[str, Any]) -> str:
+        """Generate markdown format report"""
+        md = f"""# MPDiagnosticAgent Report
+
+**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+---
+
+## Summary
+
+- **PreArm Errors:** {len(report['prearm_errors'])}
+- **Fixable Issues:** {len(report['fixable_issues'])}
+- **Warnings:** {len(report['warnings'])}
+
+---
+
+## PreArm Errors
+
+"""
+        if report['prearm_errors']:
+            for i, error in enumerate(report['prearm_errors'], 1):
+                md += f"\n### {i}. {error['error']}\n\n"
+                md += f"**Type:** {error['type']}\n\n"
+                md += f"**Severity:** {error['severity']}\n\n"
+                if error.get('explanation'):
+                    md += f"**Explanation:** {error['explanation']}\n\n"
+                if error.get('causes'):
+                    md += "**Possible Causes:**\n"
+                    for cause in error['causes'][:3]:
+                        md += f"- {cause}\n"
+                    md += "\n"
+                if error.get('solutions'):
+                    md += "**Solutions:**\n"
+                    for sol in error['solutions'][:3]:
+                        md += f"- {sol}\n"
+                    md += "\n"
+                if error.get('wiki_link'):
+                    md += f"**Documentation:** {error['wiki_link']}\n\n"
+                md += "---\n"
+        else:
+            md += "✅ No PreArm errors found\n\n"
+
+        md += "\n## Auto-Fix Solutions\n\n"
+
+        if report['fixable_issues']:
+            for i, fix in enumerate(report['fixable_issues'], 1):
+                md += f"\n### Fix {i}: {fix.title} [{fix.severity}]\n\n"
+                md += f"{fix.description}\n\n"
+                md += "**Parameters to change:**\n"
+                for param, value in fix.params.items():
+                    md += f"- `{param}` = `{value}`\n"
+                md += "\n---\n"
+        else:
+            md += "✅ No fixes needed\n\n"
+
+        md += f"\n## Generated by MPDiagnosticAgent v6.0\n"
+        md += f"🧠 Powered by Claude AI\n"
+
+        return md
 
     def connect_to_drone(self, port: Optional[str] = None) -> bool:
         """Connect to drone for auto-fix"""

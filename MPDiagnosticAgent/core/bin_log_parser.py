@@ -62,7 +62,14 @@ class BinLogParser:
             'messages': [],
             'errors': [],
             'parameters': {},
-            'stats': {}
+            'stats': {},
+            'technical': {
+                'vibrations': [],
+                'motors': [],
+                'gps': [],
+                'attitude': [],
+                'pid': []
+            }
         }
 
         try:
@@ -74,6 +81,9 @@ class BinLogParser:
             prearm_found = 0
             error_found = 0
 
+            # Counters for technical data
+            msg_type_counts = {}
+
             # Read all messages
             while True:
                 msg = self.mlog.recv_match(blocking=False)
@@ -82,6 +92,9 @@ class BinLogParser:
 
                 message_count += 1
                 msg_type = msg.get_type()
+
+                # Count message types
+                msg_type_counts[msg_type] = msg_type_counts.get(msg_type, 0) + 1
 
                 # Extract different message types
                 if msg_type == 'MSG':
@@ -129,12 +142,55 @@ class BinLogParser:
                     value = getattr(msg, 'Value', 0)
                     result['parameters'][name] = value
 
+                # TECHNICAL DATA COLLECTION
+                elif msg_type == 'VIBE':
+                    # Vibration data
+                    result['technical']['vibrations'].append({
+                        'timestamp': getattr(msg, 'TimeUS', 0) / 1000000,
+                        'VibeX': getattr(msg, 'VibeX', 0),
+                        'VibeY': getattr(msg, 'VibeY', 0),
+                        'VibeZ': getattr(msg, 'VibeZ', 0),
+                        'Clip0': getattr(msg, 'Clip0', 0),
+                        'Clip1': getattr(msg, 'Clip1', 0),
+                        'Clip2': getattr(msg, 'Clip2', 0)
+                    })
+
+                elif msg_type == 'RCOU':
+                    # Motor/servo outputs
+                    result['technical']['motors'].append({
+                        'timestamp': getattr(msg, 'TimeUS', 0) / 1000000,
+                        'C1': getattr(msg, 'C1', 0),
+                        'C2': getattr(msg, 'C2', 0),
+                        'C3': getattr(msg, 'C3', 0),
+                        'C4': getattr(msg, 'C4', 0)
+                    })
+
+                elif msg_type == 'GPS':
+                    # GPS data
+                    result['technical']['gps'].append({
+                        'timestamp': getattr(msg, 'TimeUS', 0) / 1000000,
+                        'Status': getattr(msg, 'Status', 0),
+                        'NSats': getattr(msg, 'NSats', 0),
+                        'HDop': getattr(msg, 'HDop', 9999) / 100.0,  # Convert to float
+                        'Spd': getattr(msg, 'Spd', 0)
+                    })
+
+                elif msg_type == 'ATT':
+                    # Attitude data
+                    result['technical']['attitude'].append({
+                        'timestamp': getattr(msg, 'TimeUS', 0) / 1000000,
+                        'Roll': getattr(msg, 'Roll', 0),
+                        'Pitch': getattr(msg, 'Pitch', 0),
+                        'Yaw': getattr(msg, 'Yaw', 0)
+                    })
+
             result['stats'] = {
                 'total_messages': message_count,
                 'prearm_errors': prearm_found,
                 'errors': error_found,
                 'events': len(result['events']),
-                'parameters': len(result['parameters'])
+                'parameters': len(result['parameters']),
+                'message_types': msg_type_counts
             }
 
             print(f"  ✓ Parsed {message_count} messages")
